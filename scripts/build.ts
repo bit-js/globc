@@ -1,7 +1,6 @@
 /// <reference types='bun-types' />
 import { existsSync, rmSync } from 'fs';
 import pkg from '../package.json';
-import { Glob } from 'bun';
 import { exec } from './utils';
 
 const outdir = './lib';
@@ -14,7 +13,7 @@ Bun.build({
     format: 'esm',
     target: 'bun',
     outdir,
-    entrypoints: [...new Glob('src/*.ts').scanSync('.')],
+    entrypoints: ['./src/matcher.ts'],
     minify: {
         whitespace: true
     },
