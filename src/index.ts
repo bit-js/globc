@@ -185,7 +185,9 @@ class MatcherBuilder {
   }
 }
 
-export function createMatcher(pattern: string): (path: string) => boolean {
+export type Matcher = (path: string) => boolean;
+
+export function createMatcher(pattern: string): Matcher {
   const builder = new MatcherBuilder();
   builder.load(createAST(pattern), null);
   return builder.build();

@@ -1,4 +1,4 @@
-import { createMatcher } from '../matcher';
+import { createMatcher } from '..';
 import load from './loader';
 
 load({

@@ -1,5 +1,5 @@
 import { Glob } from 'bun';
-import { createMatcher } from '../src/matcher';
+import { createMatcher } from '../src';
 import { run, bench, group } from 'mitata';
 
 const patterns = ['src/*.ts', '**/*.js', 'src/**/*.ts', 'src/[a-z][!0-9][A-Z].ts', '*/{a,b,c}.*'];
