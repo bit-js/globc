@@ -2,7 +2,7 @@ import { Glob } from 'bun';
 import { createMatcher } from '../src';
 import { run, bench, group } from 'mitata';
 
-const patterns = ['src/*.ts', '**/*.js', 'src/**/*.ts', 'src/[a-z][!0-9][A-Z].ts', '*/{a,b,c}.*'];
+const patterns = ['src/*.ts', '**/*.js', 'src/**/*.ts', 'src/[a-z][!0-9][A-Z].ts',];
 
 const paths = [
   'src/a.ts', 'src/b.js', 't/a.ts', 'root', 'path/index.ts',

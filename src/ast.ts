@@ -1,6 +1,5 @@
 export const enum NodeType {
   GROUP,
-  GLOBSTAR,
   WILDCARD,
   CHAR_RANGE,
   CHARSET,
@@ -25,18 +24,11 @@ export interface GroupNode extends BasicNode {
   2: GenericNode[];
 }
 
-export interface GlobstarNode extends BasicNode {
-  0: NodeType.GLOBSTAR;
-
-  // End with slash
-  2: boolean
-}
-
 export interface WildcardNode extends BasicNode {
   0: NodeType.WILDCARD;
 
-  // End character
-  2: GenericNode | null;
+  // Is globstart
+  2: boolean;
 }
 
 export interface CharRangeNode extends BasicNode {
@@ -78,7 +70,7 @@ export interface RootNode extends BasicNode {
 }
 
 export type GenericNode =
-  | WildcardNode | CharRangeNode | GlobstarNode | GroupNode
+  | WildcardNode | CharRangeNode | GroupNode
   | CharsetNode | AnyCharNode | StaticNode | RootNode;
 
 export function loadAST(node: GenericNode, pattern: string) {
@@ -86,36 +78,18 @@ export function loadAST(node: GenericNode, pattern: string) {
     switch (pattern.charCodeAt(idx)) {
       // Star
       case 42: {
-        if (pattern.charCodeAt(idx + 1) === 42) {
-          if (idx + 2 === length) {
-            const next: GlobstarNode = [NodeType.GLOBSTAR, null, false];
-            node[1] = next;
-            node = next;
+        const isGlobstar = pattern.charCodeAt(idx + 1) === 42;
 
-            idx += 2;
-          } else if (pattern.charCodeAt(idx + 2) === 47) {
-            const next: GlobstarNode = [NodeType.GLOBSTAR, null, true];
-            node[1] = next;
-            node = next;
+        const next: WildcardNode = [NodeType.WILDCARD, null, isGlobstar];
+        node[1] = next;
+        node = next;
 
-            idx += 3;
-          } else throw new Error(`Only / can follow **, instead recieved: ${pattern[idx + 2]}`);
-        } else {
-          const next: WildcardNode = [NodeType.WILDCARD, null, null];
-          node[1] = next;
-          node = next;
-
-          ++idx;
-        }
-
+        idx += 1 + +isGlobstar;
         continue;
       }
 
       // Question mark
       case 63: {
-        if (node[0] === NodeType.WILDCARD)
-          throw new Error('? cannot follow * or **');
-
         const next: AnyCharNode = [NodeType.ANY_CHAR, null];
         node[1] = next;
         node = next;
@@ -137,13 +111,8 @@ export function loadAST(node: GenericNode, pattern: string) {
             isNegate
           ];
 
-          // Bind the end character
-          if (node[0] === NodeType.WILDCARD && node[2] === null)
-            node[2] = next;
-          else {
-            node[1] = next;
-            node = next;
-          }
+          node[1] = next;
+          node = next;
 
           // Skip to after ]
           idx += 5;
@@ -155,12 +124,8 @@ export function loadAST(node: GenericNode, pattern: string) {
           ];
 
           // Bind the end character
-          if (node[0] === NodeType.WILDCARD && node[2] === null)
-            node[2] = next;
-          else {
-            node[1] = next;
-            node = next;
-          }
+          node[1] = next;
+          node = next;
 
           // Skip to after ]
           idx = endIdx + 1;
@@ -192,19 +157,6 @@ export function loadAST(node: GenericNode, pattern: string) {
             node[2] += pattern[idx];
             break;
 
-          case NodeType.WILDCARD: {
-            const next: StaticNode = [NodeType.STATIC, null, pattern[idx]];
-
-            if (node[2] === null)
-              node[2] = next;
-            else {
-              node[1] = next;
-              node = next;
-            }
-
-            break;
-          }
-
           default: {
             const next: StaticNode = [NodeType.STATIC, null, pattern[idx]];
             node[1] = next;
@@ -226,4 +178,3 @@ export function createAST(pattern: string): GenericNode {
   if (root[1] === null) throw new Error('Pattern is empty!');
   return root[1];
 }
-

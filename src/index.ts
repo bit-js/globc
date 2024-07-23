@@ -23,116 +23,50 @@ class MatcherBuilder {
   }
 
   // Return whether index is defined or re-assigned
-  public defineIndexTracker(): boolean {
+  public defineIndexTracker(): void {
     if (this.hasIdx) {
       if (this.idx !== 0) {
         // Increment to reset later
         this.parts.push(`k+=${this.idx};`);
         this.idx = 0;
-        return true;
       }
     } else {
       this.parts.push(`let k=${this.idx};`);
       this.hasIdx = true;
       this.idx = 0;
-      return true;
     }
-
-    return false;
   }
 
-  public load(node: GenericNode, nextNode: GenericNode | null): void {
+  public defineIndexBacktrack(): number {
+    const { previousTrackerCount } = this;
+    this.parts.push(`let t${previousTrackerCount}=k;`);
+    ++this.previousTrackerCount;
+
+    return previousTrackerCount;
+  }
+
+  public load(node: GenericNode): void {
     const { dependencies, parts } = this;
-    let closeBracket = false;
+    const nextNode = node[1];
 
     switch (node[0]) {
-      case NodeType.GROUP: {
-        parts.push('{');
-        this.defineIndexTracker();
-
-        const { previousTrackerCount } = this;
-        parts.push(`const t${previousTrackerCount}=k;`);
-        ++this.previousTrackerCount;
-
-        // Load the first one without resetting the index
-        const next = node[1];
-        const list = node[2];
-        this.load(list[0], next);
-
-        for (let i = 1, { length } = list; i < length; ++i) {
-          // Reset the index
-          parts.push(`k=t${previousTrackerCount};`);
-          this.idx = 0;
-
-          this.load(list[i], next);
-        }
-
-        parts.push('}');
-        return;
-      }
-
-      case NodeType.GLOBSTAR:
-        if (node[2]) {
-          closeBracket = true;
-          parts.push('{');
-          this.defineIndexTracker();
-          parts.push("const s=p.lastIndexOf('/');if(s>=k)k=s+1;");
-        } else {
-          // Match everything after
-          parts.push('return true;');
-          return;
-        }
-
-        break;
-
       case NodeType.WILDCARD:
-        // No next node so no need to check node[1] after
-        if (node[2] === null) {
-          parts.push(`return p.indexOf('/',${this.getIndex()})===-1;`);
-          return;
+
+        if (nextNode === null) {
+          if (node[2]) parts.push('return true;');
+          else parts.push(`if(p.indexOf('/',${this.getIndex()})===-1)return true;`);
+        } else {
+          parts.push('{');
+
+          this.defineIndexTracker();
+          const trackerID = this.defineIndexBacktrack();
+
+          parts.push(`while(k<l${node[2] ? '' : '&&p.charCodeAt(k)!==47'}){`);
+          this.load(nextNode);
+          parts.push(`k=++t${trackerID};}}`);
         }
 
-        const negateNode = node[2];
-
-        closeBracket = true;
-        parts.push('{');
-        this.defineIndexTracker();
-
-        // Reset index to use k instead
-        this.idx = 0;
-
-        const negateCharsMap = this.depend('[]');
-        let isNegate = false;
-
-        switch (negateNode[0]) {
-          case NodeType.CHAR_RANGE: {
-            dependencies.push(`for(let i=${negateNode[2]};i<${negateNode[3] + 1};++i)${negateCharsMap}[i]=null;`);
-            isNegate = negateNode[4];
-            break;
-          }
-
-          case NodeType.CHARSET: {
-            for (let i = 0, list = negateNode[2], { length } = list; i < length; ++i) dependencies.push(`${negateCharsMap}[${list.charCodeAt(i)}]=null;`);
-            isNegate = negateNode[3];
-            break;
-          }
-
-          case NodeType.STATIC: {
-            // Only check one character
-            dependencies.push(`${negateCharsMap}[${negateNode[2].charCodeAt(0)}]=null;`);
-            break;
-          }
-
-          default:
-            throw new Error(`Invalid node: ${JSON.stringify(negateNode)}`);
-        }
-
-        // Stop when reach slash
-        dependencies.push(`${negateCharsMap}[47]=null;`);
-        parts.push(`while(k<l&&${negateCharsMap}[p.charCodeAt(k)]${isNegate ? '=' : '!'}==null)++k;`);
-        ++this.idx;
-
-        break;
+        return;
 
       case NodeType.CHAR_RANGE: {
         const key = this.depend('[]');
@@ -166,21 +100,19 @@ class MatcherBuilder {
 
       case NodeType.ROOT:
         break;
+
+      case NodeType.GROUP:
+        break;
     }
 
     // Handle next node
-    const next = node[1] ?? nextNode;
-    if (next === null)
+    if (nextNode === null)
       parts.push(`if(l===${this.getIndex()})return true;`);
     else
-      this.load(next, null);
-
-    if (closeBracket)
-      parts.push('}');
+      this.load(nextNode);
   }
 
   public build(): any {
-    console.log(`${this.dependencies.join('')}return (p)=>{const l=p.length;${this.parts.join('')}return false;}`);
     return Function(`${this.dependencies.join('')}return (p)=>{const l=p.length;${this.parts.join('')}return false;}`)();
   }
 }
@@ -189,6 +121,6 @@ export type Matcher = (path: string) => boolean;
 
 export function createMatcher(pattern: string): Matcher {
   const builder = new MatcherBuilder();
-  builder.load(createAST(pattern), null);
+  builder.load(createAST(pattern));
   return builder.build();
 }
